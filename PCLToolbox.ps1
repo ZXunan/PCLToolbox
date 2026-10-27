@@ -1,59 +1,29 @@
-﻿# =====================================================================
-#  PCLToolbox  v1.0
-#  同时适配：
-#    1) 官方 PCL（Plain Craft Launcher，Hex-Dragon/PCL2）
-#    2) PCL CE（Plain Craft Launcher Community Edition，PCL-Community/PCL2-CE）
-#
-#  功能：一键修复下载限制；检测到启动器有新版本时可自动更新到最新版并修复。
-#  工作方式：
-#    * 读取当前目录下启动器的版本，下载「完全相同版本」的源码；
-#    * 移除其中的下载限制（官方版：ModSecret.RestrictMcDownload = False；
-#      CE 版：RegionAssessment.IsRestricted = False）；
-#    * 使用官方发布时相同的编译配置重新编译，校验版本号后备份并替换原程序。
-#
-#  说明：官方 PCL 的发布版由非公开源码构建，其公开源码为「开源版」（缺少
-#        联机/检查更新/公告/赞助等依赖官方服务器的私有实现）。因此官方 PCL
-#        重编译后会恢复下载功能，但上述依赖官方服务器的功能不可用，详见
-#        「README.md」。PCL CE 为完整开源，可做到与原版一致。
-# =====================================================================
-
-param(
-    # 仅供自动化测试：不弹窗、自动确认
+﻿param(
     [switch]$Unattended,
-    # 可选：PCL 启动器所在目录（不传则用工具所在目录，或从上次记录/选择框获取）
     [string]$PclDir = '',
-    # 可选：未检测到启动器时，直接下载官方 PCL（跳过询问）
     [switch]$DownloadOfficial,
-    # 可选：未检测到启动器时，直接下载 PCL CE（跳过询问）
     [switch]$DownloadCe,
-    # 可选：下载模式的安装目录（不传则询问或使用工具目录）
     [string]$InstallDir = ''
 )
-
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $script:Unattended = $Unattended.IsPresent
-
 Add-Type -AssemblyName System.Windows.Forms | Out-Null
 Add-Type -AssemblyName System.Drawing | Out-Null
 Add-Type -AssemblyName System.IO.Compression.FileSystem | Out-Null
-
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ToolTitle = 'PCLToolbox'
 $CeRepo = 'PCL-Community/PCL2-CE'
 $OfficialRepo = 'Hex-Dragon/PCL2'
 $OfficialCoreRepo = 'Meloong-Git/MeloongCore'
-
 $CeRestrictedSince = [version]'2.15.1.0'
 $OfficialRestrictedSince = [version]'2.99.0.0'
-
 $WorkRoot = Join-Path $env:LOCALAPPDATA 'PCLDownloadFix'
 $TargetDir = $ScriptDir
 $LastPclDirFile = Join-Path $WorkRoot 'last-pcl-dir.txt'
 $LogFile = Join-Path $WorkRoot '修复日志.txt'
 $CeMarkerName = '.pcl-downloadfix.json'
 $OfficialMarkerName = '.pcl-downloadfix.official.json'
-
 $OfficialOAuthClientId = 'fe72edc2-3a6f-4280-90e8-e2beb64ce7e1'
 $OfficialClsBaseUrl = 'https://ap-shanghai.cls.tencentcs.com/track?topic_id=pcl-remote-1253424809'
 $OfficialCurseForgeKey = '$2a$10$7WWV1WELcwX8Xp7d68MHs.5grTyZVa6SynyeSyMh1rsE89nIa09zO'
@@ -61,12 +31,9 @@ $KnownOfficialSubmodules = @{
     '2.99.0.0' = '98157d65c7627721c816c02e8be96ac4fe61d615'
     '2.99.0.1' = '4c60c2962c3b50bc3fe96ed5dd9259b980173580'
 }
-# 没有 git 标签的版本 -> 发布提交（从 GitHub 提交记录确认）
 $KnownOfficialCommits = @{
     '2.99.0.1' = '93ede5d9e638c99fcec853a9ba1eecd91ceee7f5'
 }
-
-# PCL CE v2.15.1 官方发布版内置密钥（“没有原程序可提取”时用于下载安装模式）
 $KnownCeSecrets = @{
     '2.15.1.0' = @{
         MS_CLIENT_ID = 'c14b0370-8d75-42f8-b329-5b60d39e319f'
@@ -79,10 +46,6 @@ $KnownCeSecrets = @{
         GITHUB_SHA = '1a7653127d578efdb2a9388999a3fdc67d9e49d5'
     }
 }
-
-# ---------------------------------------------------------------------
-# 基础工具
-# ---------------------------------------------------------------------
 function Write-Log {
     param([string]$Message, [string]$Level = 'INFO')
     try {
@@ -92,7 +55,6 @@ function Write-Log {
     } catch { }
     Write-Host $line
 }
-
 function Show-Msg {
     param([string]$Text, [string]$Icon = 'Information', [string]$Buttons = 'OK')
     if ($script:Unattended) {
@@ -111,7 +73,6 @@ function Show-ErrorMsg {
     [void](Show-Msg -Text $Text -Icon Error -Buttons OK)
     exit 1
 }
-
 function Save-LastPclDir {
     param([string]$Dir)
     if (-not $Dir) { return }
@@ -151,7 +112,6 @@ function Invoke-Download {
         return $false
     }
 }
-
 function Invoke-DownloadAny {
     param([string[]]$Urls, [string]$OutFile)
     foreach ($u in ($Urls | Select-Object -Unique)) {
@@ -159,7 +119,6 @@ function Invoke-DownloadAny {
     }
     return $false
 }
-
 function Expand-Zip {
     param([string]$ZipPath, [string]$DestDir)
     if (Test-Path $DestDir) { Remove-Item -Recurse -Force $DestDir -ErrorAction SilentlyContinue }
@@ -170,10 +129,6 @@ function Expand-Zip {
         Expand-Archive -Path $ZipPath -DestinationPath $DestDir -Force
     }
 }
-
-# ---------------------------------------------------------------------
-# 启动器识别
-# ---------------------------------------------------------------------
 function Get-Launchers {
     $list = New-Object System.Collections.Generic.List[object]
     $exes = @(Get-ChildItem -Path $TargetDir -Filter '*.exe' -File -ErrorAction SilentlyContinue |
@@ -196,7 +151,6 @@ function Get-Launchers {
     }
     return , $list
 }
-
 function Test-ProcessRunning {
     param([string]$ExePath)
     $procName = [System.IO.Path]::GetFileNameWithoutExtension($ExePath)
@@ -205,7 +159,6 @@ function Test-ProcessRunning {
     }
     return $false
 }
-
 function Select-Launchers {
     param($Items)
     if ($script:Unattended -or $Items.Count -le 1) { return , $Items }
@@ -245,10 +198,6 @@ function Select-Launchers {
     foreach ($b in $boxes) { if ($b.CheckBox.Checked) { $selected.Add($b.Item) } }
     return , $selected
 }
-
-# ---------------------------------------------------------------------
-# 标记 / 备份 / 替换
-# ---------------------------------------------------------------------
 function Get-MarkerInfo {
     param([string]$Kind, [string]$ExePath)
     $file = Join-Path $TargetDir $(if ($Kind -eq 'CE') { $CeMarkerName } else { $OfficialMarkerName })
@@ -262,7 +211,6 @@ function Get-MarkerInfo {
     } catch { }
     return $null
 }
-
 function Save-MarkerInfo {
     param([string]$Kind, [string]$Version, [string]$Ref, [string]$Sha256, [string]$Backup)
     $file = Join-Path $TargetDir $(if ($Kind -eq 'CE') { $CeMarkerName } else { $OfficialMarkerName })
@@ -273,7 +221,6 @@ function Save-MarkerInfo {
     }
     ($obj | ConvertTo-Json) | Set-Content -Path $file -Encoding UTF8
 }
-
 function Backup-And-Replace {
     param([string]$ExePath, [string]$BuiltExe, [string]$Kind, [version]$Version)
     if (Test-ProcessRunning -ExePath $ExePath) {
@@ -289,10 +236,6 @@ function Backup-And-Replace {
     Copy-Item -Path $BuiltExe -Destination $ExePath -Force
     return $backup
 }
-
-# =====================================================================
-#  PCL CE 分支
-# =====================================================================
 function Get-CeRef {
     param($Launcher)
     $sha = $null
@@ -300,7 +243,6 @@ function Get-CeRef {
     if ($sha) { return @{ Kind = 'sha'; Value = $sha } }
     return @{ Kind = 'tag'; Value = ('v{0}.{1}.{2}' -f $Launcher.Version.Major, $Launcher.Version.Minor, $Launcher.Version.Build) }
 }
-
 function Get-CeSource {
     param([hashtable]$Ref)
     $dirName = ('ce-src-' + $Ref.Value) -replace '[^0-9A-Za-z\.\-]', '_'
@@ -327,14 +269,12 @@ function Get-CeSource {
     Write-Log "CE 源码已就绪: $srcDir"
     return $srcDir
 }
-
 function Test-CeSourceHasRestriction {
     param([string]$SrcDir)
     $region = Join-Path $SrcDir 'PCL.Core\App\Region\RegionPolicy.cs'
     if ((Test-Path $region) -and ([System.IO.File]::ReadAllText($region) -match 'IsRestricted\s*=>')) { return $true }
     return $false
 }
-
 function Update-CeSource {
     param([string]$SrcDir)
     $pattern = '(?<prefix>IsRestricted\s*=>\s*)[^;]+;'
@@ -349,7 +289,6 @@ function Update-CeSource {
     Write-Log "已移除下载鉴权(CE): $file"
     return [regex]::IsMatch($patched, $donePattern)
 }
-
 function Test-BuiltSecrets {
     param([string]$ExePath, [hashtable]$Secrets)
     if ($Secrets.Count -eq 0) { return @() }
@@ -367,7 +306,6 @@ function Test-BuiltSecrets {
     }
     return $missing
 }
-
 function Read-Utf16Run {
     param([byte[]]$Bytes, [int]$Start, [int]$MaxChars = 512)
     $sb = New-Object System.Text.StringBuilder
@@ -379,7 +317,6 @@ function Read-Utf16Run {
     }
     return $sb.ToString()
 }
-
 function Get-CeEmbeddedSecrets {
     param([string]$ExePath)
     $keys = @('MS_CLIENT_ID', 'CURSEFORGE_API_KEY', 'TELEMETRY_KEY', 'NAID_CLIENT_ID',
@@ -453,7 +390,6 @@ function Get-CeEmbeddedSecrets {
     }
     return $result
 }
-
 function Invoke-CePublish {
     param([string]$Dotnet, [string]$SrcDir, [hashtable]$Secrets, [string]$CommitSha, [string]$OutputDir)
     $csproj = Join-Path $SrcDir 'Plain Craft Launcher 2\Plain Craft Launcher 2.csproj'
@@ -484,10 +420,6 @@ function Invoke-CePublish {
     Write-Log 'CE 编译成功'
     return (Join-Path $OutputDir 'Plain Craft Launcher 2.exe')
 }
-
-# =====================================================================
-#  官方 PCL 分支
-# =====================================================================
 function Ensure-Dotnet {
     $localDotnet = Join-Path $WorkRoot 'dotnet\dotnet.exe'
     $sys = Get-Command 'dotnet' -ErrorAction SilentlyContinue
@@ -511,9 +443,7 @@ function Ensure-Dotnet {
     if (Test-Path $localDotnet) { $env:DOTNET_ROOT = $dest; return $localDotnet }
     return $null
 }
-
 function Find-MSBuild {
-# 测试钩子：设置该环境变量可模拟没有 MSBuild 的电脑
     if ($env:PCLTOOLBOX_NO_MSBUILD -eq '1') { Write-Log '测试环境：忽略 MSBuild 检测' 'WARN'; return $null }
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
     if (Test-Path $vswhere) {
@@ -526,7 +456,6 @@ function Find-MSBuild {
     if ($cmd) { Write-Log "使用 MSBuild: $($cmd.Source)"; return $cmd.Source }
     return $null
 }
-
 function Ensure-Net48Refs {
     $cached = Join-Path $WorkRoot 'net48refs'
     $refRoot = Join-Path $cached 'build'
@@ -544,11 +473,9 @@ function Ensure-Net48Refs {
     if (Test-Path (Join-Path $refRoot '.NETFramework\v4.8\mscorlib.dll')) { return $refRoot }
     return $null
 }
-
 function Invoke-GitHubApiJson {
     param([string]$Url, [string]$CacheName, [int]$MaxAgeHours = 6)
     $out = Join-Path $WorkRoot ('meta\' + $CacheName)
-    # 缓存有效期内直接复用（减少 GitHub API 调用，避免触发限流）
     if (Test-Path $out) {
         try {
             $age = (Get-Date) - (Get-Item $out).LastWriteTime
@@ -566,7 +493,6 @@ function Invoke-GitHubApiJson {
             return ($txt | ConvertFrom-Json)
         } catch { return $null }
     }
-    # 网络/限流失败时回退到旧缓存
     if (Test-Path $out) {
         try {
             $txt = [System.IO.File]::ReadAllText($out, [System.Text.Encoding]::UTF8)
@@ -578,7 +504,6 @@ function Invoke-GitHubApiJson {
     }
     return $null
 }
-
 function Get-LatestCeFromAtom {
     $out = Join-Path $WorkRoot 'meta\ce-tags.atom'
     if (-not (Invoke-DownloadAny -Urls @('https://github.com/PCL-Community/PCL2-CE/tags.atom') -OutFile $out)) { return $null }
@@ -603,7 +528,6 @@ function Get-LatestCeFromAtom {
     } catch { }
     return $null
 }
-
 function Get-LatestOfficialFromAtom {
     $out = Join-Path $WorkRoot 'meta\official-commits.atom'
     if (-not (Invoke-DownloadAny -Urls @('https://github.com/Hex-Dragon/PCL2/commits/main.atom') -OutFile $out)) { return $null }
@@ -627,7 +551,6 @@ function Get-LatestOfficialFromAtom {
     return $null
 }
 function Get-LatestCeInfo {
-    # 优先读 GitHub Releases 的 latest（正式版）；失败则按 tags 取最高稳定版本
     $j = Invoke-GitHubApiJson -Url "https://api.github.com/repos/$CeRepo/releases/latest" -CacheName 'ce-latest.json'
     if ($j -and $j.tag_name) {
         $tag = [string]$j.tag_name
@@ -649,10 +572,7 @@ function Get-LatestCeInfo {
     if ($atom) { Write-Log "通过 Atom 订阅获取 PCL CE 最新版本: v$($atom.Version)" 'WARN'; return $atom }
     return $null
 }
-
 function Get-LatestOfficialInfo {
-    # 官方 PCL 的最新版本 = 提交记录中 <版本号> 正式版 的最大版本
-    # 先取最近 30 条（数据量小、成功率高），没找到再取 100 条
     foreach ($perPage in @(30, 100)) {
         $j = Invoke-GitHubApiJson -Url "https://api.github.com/repos/$OfficialRepo/commits?per_page=$perPage" -CacheName "official-commits-$perPage.json"
         if (-not $j) { continue }
@@ -676,7 +596,6 @@ function Get-OfficialTagCandidates {
     $v3 = '{0}.{1}.{2}' -f $Version.Major, $Version.Minor, $Version.Build
     return @($v4, "v$v4", $v3, "v$v3")
 }
-
 function Get-OfficialSource {
     param([version]$Version, [string]$PreferredCommit = '')
         $verText = $Version.ToString()
@@ -704,7 +623,6 @@ function Get-OfficialSource {
         Write-Log "使用指定的发布提交: $ref"
     }
     if (-not $ref) {
-        # 没有对应 git 标签（例如官方 2.99.0.1）：从提交记录中找“<版本号> 正式版”提交
         Write-Log "未找到 v$verText 的 git 标签，改为从 GitHub 提交记录定位源码…"
         $commitsOut = Join-Path $WorkRoot 'official\commits.json'
         if (Invoke-DownloadAny -Urls @("https://api.github.com/repos/$OfficialRepo/commits?per_page=100") -OutFile $commitsOut) {
@@ -746,7 +664,6 @@ function Get-OfficialSource {
     Move-Item -Path $root.FullName -Destination $srcDir
     Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
     Remove-Item -Force $zip -ErrorAction SilentlyContinue
-
     $subSha = $KnownOfficialSubmodules[$verText]
     if (-not $subSha) {
         Write-Log '查询 MeloongCore 子模块提交…'
@@ -777,7 +694,6 @@ function Get-OfficialSource {
     Write-Log "官方 PCL 源码已就绪: $srcDir"
     return $srcDir
 }
-
 function Get-OfficialRestrictionState {
     param([string]$SrcDir)
     $ms = Join-Path $SrcDir 'Plain Craft Launcher 2\Modules\ModSecret.vb'
@@ -787,7 +703,6 @@ function Get-OfficialRestrictionState {
     if ($text -match 'RestrictMcDownload\s+As\s+Boolean\s*=\s*False') { return 'Patched' }
     return 'Absent'
 }
-
 function Update-OfficialSource {
     param([string]$SrcDir)
     $ms = Join-Path $SrcDir 'Plain Craft Launcher 2\Modules\ModSecret.vb'
@@ -808,7 +723,6 @@ function Update-OfficialSource {
         else { $missing += $pair[0] }
     }
     if ($missing.Count -gt 0) { Write-Log ("官方源码中未找到以下待替换内容（可能版本结构已变化）：" + ($missing -join ' ; ')) 'WARN' }
-
     $stub = "    Friend Function GetIdentify() As String`n        Return `"0000-0000-0000-0000`"`n    End Function"
     $impl = @'
     Friend Function GetIdentify() As String
@@ -846,7 +760,6 @@ function Update-OfficialSource {
     Write-Log "已修改官方版 ModSecret.vb（关闭下载限制等）"
     return ([System.IO.File]::ReadAllText($ms) -match 'RestrictMcDownload\s+As\s+Boolean\s*=\s*False')
 }
-
 function Invoke-OfficialBuild {
     param([string]$SrcDir, [string]$Dotnet, [string]$MSBuild, [string]$RefRoot, [version]$Version)
     $dotnetRoot = Split-Path -Parent $Dotnet
@@ -857,12 +770,10 @@ function Invoke-OfficialBuild {
     $env:MSBuildSDKsPath = Join-Path $sdkVerDir.FullName 'Sdks'
     $env:MSBuildEnableWorkloadResolver = 'false'
     Write-Log "MSBuildSDKsPath: $($env:MSBuildSDKsPath)"
-
     Write-Log '构建 PCLCS（含依赖）…'
     $pclcs = Join-Path $SrcDir 'PCLCS\PCLCS.csproj'
     $out1 = (& $Dotnet build $pclcs -c Release --nologo 2>&1 | Out-String)
     if ($LASTEXITCODE -ne 0) { throw ("PCLCS 构建失败：`r`n" + ((($out1 -split "\r?\n") | Select-Object -Last 20) -join "`r`n")) }
-
     $proj = Join-Path $SrcDir 'Plain Craft Launcher 2\Plain Craft Launcher 2.vbproj'
     if (-not (Test-Path $proj)) { throw "找不到官方 PCL 项目文件: $proj" }
     Write-Log '使用 MSBuild 编译官方 PCL…'
@@ -886,10 +797,6 @@ function Invoke-OfficialBuild {
     Write-Log '官方 PCL 编译成功'
     return $built
 }
-
-# =====================================================================
-#  主流程
-# =====================================================================
 function Get-CeSecretsForBuild {
     param([string]$Tag, [version]$Version)
     $key = [string]$Version
@@ -906,7 +813,6 @@ function Get-CeSecretsForBuild {
     }
     return $null
 }
-
 function Show-NoLauncherChoice {
     $form = New-Object System.Windows.Forms.Form
     $form.Text = "$ToolTitle - 未找到启动器"
@@ -1004,7 +910,6 @@ function Show-DownloadDialog {
     $form.Dispose()
     return , $kinds
 }
-
 function Invoke-FreshInstall {
     param([string]$Kind, [string]$InstallDir, [string]$Dotnet, [string]$MSBuild, [string]$RefRoot)
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
@@ -1062,7 +967,6 @@ function Invoke-FreshInstall {
 function Invoke-Main {
     if (-not (Test-Path $WorkRoot)) { New-Item -ItemType Directory -Force -Path $WorkRoot | Out-Null }
     Write-Log '================ PCLToolbox v1.0 启动 ================'
-
     $script:TargetDir = $ScriptDir
     if ($PclDir) {
         if (-not (Test-Path $PclDir)) { Show-ErrorMsg "指定的 PCL 目录不存在：`r`n$PclDir" }
@@ -1079,7 +983,6 @@ function Invoke-Main {
             $launchers = Get-Launchers
         }
     }
-    # ---------- 未检测到启动器：让用户选择“选择已有文件夹”还是“直接下载” ----------
     $downloadKinds = New-Object System.Collections.Generic.List[string]
     if ($DownloadOfficial) { $downloadKinds.Add('Official') }
     if ($DownloadCe) { $downloadKinds.Add('CE') }
@@ -1113,7 +1016,6 @@ function Invoke-Main {
         }
     }
     elseif ($downloadKinds.Count -gt 0) {
-        # 安装位置
         $destDir = $script:TargetDir
         if ($InstallDir) {
             if (-not (Test-Path $InstallDir)) { New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null }
@@ -1128,7 +1030,6 @@ function Invoke-Main {
         }
         $script:TargetDir = $destDir
         Write-Log "下载模式安装目录: $destDir"
-        # 检查编译环境：缺少官方 PCL 的 MSBuild 时，询问是否改用 PCL CE
         $needCe = $downloadKinds -contains 'CE'
         $needOfficial = $downloadKinds -contains 'Official'
         $dotnet = $null; $msbuild = $null; $refRoot = $null
@@ -1152,7 +1053,6 @@ function Invoke-Main {
             $dotnet = Ensure-Dotnet
             if (-not $dotnet) { Show-ErrorMsg ("准备 .NET 编译环境失败。`r`n`r`n请检查网络连接后重试。`r`n日志：$LogFile") }
         }
-
         $lines = New-Object System.Collections.Generic.List[string]
         foreach ($k in $downloadKinds) {
             if ($k -eq 'CE') { $lines.Add('  · PCL CE（社区版，最新正式版）') } else { $lines.Add('  · PCL 官方版（最新正式版）') }
@@ -1165,7 +1065,6 @@ function Invoke-Main {
         $msg = "未检测到启动器，将下载并编译以下版本（均已恢复下载功能）：`r`n" + ($lines -join "`r`n") + "`r`n`r`n安装位置：$destDir`r`n`r`n下载与编译需要联网（首次可能需要 5~20 分钟）。" + $extra2 + "`r`n`r`n是否继续？"
         $ansD = Show-Msg -Text $msg -Icon Question -Buttons YesNo
         if ($ansD -ne [System.Windows.Forms.DialogResult]::Yes) { Write-Log '用户取消'; exit 0 }
-        # 检查编译环境：缺少官方 PCL 的 MSBuild 时，询问是否改用 PCL CE
         $failed = New-Object System.Collections.Generic.List[string]
         $done = New-Object System.Collections.Generic.List[string]
         foreach ($kind in $downloadKinds) {
@@ -1194,7 +1093,6 @@ function Invoke-Main {
             exit 0
         }
     }
-    # ---------- 1. 检查最新版本 ----------
     foreach ($l in $launchers) {
         $latest = $null
         try {
@@ -1209,8 +1107,6 @@ function Invoke-Main {
             Write-Log "版本检查: $kindName 当前 v$($l.Version)，最新 v$($latest.Version)"
         }
     }
-
-    # ---------- 2. 询问是否更新到最新版 ----------
     $updatable = @($launchers | Where-Object { $_.Latest -and ($_.Latest.Version -gt $_.Version) })
     if ($updatable.Count -gt 0) {
         $lines = New-Object System.Collections.Generic.List[string]
@@ -1225,8 +1121,6 @@ function Invoke-Main {
             Write-Log '用户选择更新到最新版本'
         } else { Write-Log '用户选择不更新' }
     }
-
-    # ---------- 3. 生成待处理列表 ----------
     $needsAction = New-Object System.Collections.Generic.List[object]
     $notes = New-Object System.Collections.Generic.List[string]
     foreach ($l in $launchers) {
@@ -1249,30 +1143,24 @@ function Invoke-Main {
         $l.Label = "$name  v$($l.TargetVersion)（修复下载限制）"
         $needsAction.Add($l)
     }
-
     if ($needsAction.Count -eq 0) {
         Show-Info (($notes -join "`r`n`r`n") + "`r`n`r`n没有需要处理的项目。")
         exit 0
     }
-
     $selected = Select-Launchers -Items $needsAction
     if ($selected.Count -eq 0) { Write-Log '用户取消'; exit 0 }
-
-    # ---------- 4. 确认 ----------
     $lines = New-Object System.Collections.Generic.List[string]
     foreach ($sItem in $selected) { $lines.Add("  · $($sItem.Label)") }
     $hasOfficial = @($selected | Where-Object { $_.Kind -eq 'Official' }).Count -gt 0
     $hasCe = @($selected | Where-Object { $_.Kind -eq 'CE' }).Count -gt 0
     $extra = ''
     if ($hasOfficial) {
-        $extra += "`r`n`r`n注意：官方 PCL 发布版使用非公开源码构建，公开源码为「开源版」。重编译后可恢复下载功能，但联机、检查更新、公告、赞助等依赖官方服务器的功能将不可用（详见 使用说明.txt）。"
+        $extra += "`r`n`r`n注意：官方 PCL 发布版使用非公开源码构建，公开源码为「开源版」。重编译后可恢复下载功能，但联机、检查更新、公告、赞助等依赖官方服务器的功能将不可用（详见 README.md）。"
     }
     if ($hasCe) { $extra += "`r`nPCL CE 为完整开源，修复后与原版一致。" }
     $msg = "即将执行：`r`n" + ($lines -join "`r`n") + "`r`n`r`n工具会下载对应版本源码并用相同配置重新编译，首次运行需联网下载 .NET 编译环境与源码（可能需要 5~20 分钟）。" + $extra + "`r`n`r`n是否继续？"
     $ans2 = Show-Msg -Text $msg -Icon Question -Buttons YesNo
     if ($ans2 -ne [System.Windows.Forms.DialogResult]::Yes) { Write-Log '用户取消'; exit 0 }
-
-    # ---------- 5. 准备编译环境 ----------
     $dotnet = $null; $msbuild = $null; $refRoot = $null
     if ($hasCe) {
         $dotnet = Ensure-Dotnet
@@ -1325,7 +1213,6 @@ function Invoke-Main {
             if (-not $refRoot) { Show-ErrorMsg ("下载 .NET Framework 4.8 参考程序集失败。`r`n`r`n请检查网络连接后重试。`r`n日志：$LogFile") }
         }
     }
-    # ---------- 6. 逐项处理 ----------
     $success = New-Object System.Collections.Generic.List[string]
     $failed = New-Object System.Collections.Generic.List[string]
     foreach ($l in $selected) {
@@ -1393,7 +1280,6 @@ function Invoke-Main {
             $failed.Add($name + '：' + $_.Exception.Message)
         }
     }
-
     $final = New-Object System.Collections.Generic.List[string]
     foreach ($s in $success) { $final.Add("已处理：$s") }
     foreach ($n in $notes) { $final.Add($n) }
